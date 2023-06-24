@@ -1,0 +1,12 @@
+packagecache/**
+
+glm/
+imgui/
+SDL2/
+stb/
+*-wrap/
+
+glm*.wrap
+imgui*.wrap
+SDL2*.wrap
+*-wrap.wrap
