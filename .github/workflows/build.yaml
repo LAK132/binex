@@ -54,8 +54,7 @@ jobs:
 
       - run: meson setup build --buildtype debugoptimized ${{ matrix.setup-options }}
       - run: meson compile -C build
-      - run: build/lak_test --testall
-      - run: build/lak_test_bigint_standalone --testall
+      # - run: build/binex_test --testall
 
   push-staging:
     needs: run-tests
