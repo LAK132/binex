@@ -4,6 +4,8 @@
 
 #include <lak/imgui/widgets.hpp>
 
+#include <lak/opengl/state.hpp>
+
 #include <lak/file.hpp>
 #include <lak/strconv.hpp>
 #include <lak/test.hpp>
