@@ -46,7 +46,7 @@ struct main_window : bex::basic_window<main_window>
 		static lak::path_getter pgetter;
 		if (auto res = pgetter(); res) load_binary_async(*res);
 
-		if (ImGui::BeginMenu(ASDFGHJKL))
+		if (ImGui::BeginMenu("File"))
 		{
 			if (ImGui::MenuItem("Open...", nullptr, false, !binary_load))
 				pgetter.open_file(binary_path);
