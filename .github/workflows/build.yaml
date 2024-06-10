@@ -54,7 +54,8 @@ jobs:
           echo "CC=$(brew --prefix llvm@15)/bin/clang" >> $GITHUB_ENV
           echo "CXX=$(brew --prefix llvm@15)/bin/clang++" >> $GITHUB_ENV
 
-      - run: meson setup build --buildtype debugoptimized ${{ matrix.setup-options }}
+        # _DISABLE_CONSTEXPR_MUTEX_CONSTRUCTOR is a hack fix for https://github.com/actions/runner-images/issues/10004
+      - run: meson setup build -Dcpp_args="-D_DISABLE_CONSTEXPR_MUTEX_CONSTRUCTOR" --buildtype debugoptimized ${{ matrix.setup-options }}
       - run: meson compile -C build
       # - run: build/binex_test --testall
 
