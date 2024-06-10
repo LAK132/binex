@@ -17,7 +17,7 @@ bool bex::memory_region_selector::draw(lak::span<byte_t> data,
 	uint64_t view_end = view_begin + view_size;
 
 	const uint64_t range_min = 0;
-	uint64_t range_max       = data.size();
+	const uint64_t range_max = data.size();
 
 	bool updated = force_update;
 
@@ -85,15 +85,19 @@ bool bex::memory_region_selector::draw(lak::span<byte_t> data,
 		}
 	}
 
-	auto vdata = data.subspan(static_cast<size_t>(view_begin),
-	                          static_cast<size_t>(view_size));
+	const uint64_t bound_begin = std::min(view_begin, range_max);
+	const uint64_t bound_end =
+	  std::min(std::max(view_begin, view_end), range_max);
+
+	auto vdata = data.subspan(static_cast<size_t>(bound_begin),
+	                          static_cast<size_t>(bound_end - bound_begin));
 	updated |= data.empty() != view_data.empty() ||
 	           !lak::same_span<byte_t>(vdata, view_data);
 
 	if (updated)
 	{
-		view_begin = std::min(view_begin, range_max);
-		view_end   = std::min(std::max(view_begin, view_end), range_max);
+		view_begin = bound_begin;
+		view_end   = bound_end;
 		view_size  = view_end - view_begin;
 		view_data  = vdata;
 	}
