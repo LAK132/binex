@@ -1,12 +1,14 @@
 #include "main.hpp"
 
 #include "binex/basic_window.hpp"
+#include "binex/widgets.hpp"
 
 #include <lak/imgui/widgets.hpp>
 
 #include <lak/opengl/state.hpp>
 
 #include <lak/file.hpp>
+#include <lak/future.hpp>
 #include <lak/strconv.hpp>
 #include <lak/test.hpp>
 
@@ -16,9 +18,94 @@ int opengl_major, opengl_minor;
 lak::graphics_mode graphics_mode;
 bool force_only_error = false;
 
+lak::fs::path binary_path;
+lak::optional<lak::future<void>> binary_load;
+lak::array<byte_t> binary;
+bool binary_update;
+
+void load_binary(lak::fs::path path)
+{
+	if (auto res = lak::read_file(path); res.is_ok())
+		binary = lak::move(res.unsafe_unwrap());
+	else
+		ERROR(res.unsafe_unwrap_err());
+	binary_path = lak::move(path);
+}
+
+void load_binary_async(const lak::fs::path &path)
+{
+	binary_load = lak::async(load_binary, path);
+}
+
 struct main_window : bex::basic_window<main_window>
 {
-	static void menu_bar(float frame_time) { ImGui::Text("%f", frame_time); }
+	using super_window = bex::basic_window<main_window>;
+
+	static void file_menu()
+	{
+		static lak::path_getter pgetter;
+		if (auto res = pgetter(); res) load_binary_async(*res);
+
+		if (ImGui::BeginMenu(ASDFGHJKL))
+		{
+			if (ImGui::MenuItem("Open...", nullptr, false, !binary_load))
+				pgetter.open_file(binary_path);
+			ImGui::EndMenu();
+		}
+	}
+
+	static void menu_bar(float)
+	{
+		file_menu();
+		bex::debug_menu();
+	}
+
+	static void left_region(float)
+	{
+		static MemoryEditor editor;
+		editor.DrawContents(reinterpret_cast<uint8_t *>(binary.data()),
+		                    binary.size());
+	}
+
+	static void right_region(float)
+	{
+		bex::memory_view(binary, graphics_mode, binary_update);
+	}
+
+	static void main_region(float frame_time)
+	{
+		if (binary_load)
+		{
+			ImGui::BeginChild(
+			  "Mid", {-1, -1}, true, ImGuiWindowFlags_NoSavedSettings);
+			static float time_acc = 0.0f;
+			time_acc += frame_time;
+			if (time_acc > 3.0f) time_acc -= std::trunc(time_acc);
+			if (time_acc > 2.0f)
+				ImGui::Text("Loading...");
+			else if (time_acc > 1.0f)
+				ImGui::Text("Loading..");
+			else
+				ImGui::Text("Loading.");
+
+			if (binary_load->has_value())
+			{
+				binary_load.reset();
+				binary_update = true;
+				time_acc      = 0.0f;
+			}
+			ImGui::EndChild();
+		}
+		else if (binary.empty())
+		{
+			ImGui::BeginChild(
+			  "Mid", {-1, -1}, true, ImGuiWindowFlags_NoSavedSettings);
+			ImGui::Text("No file");
+			ImGui::EndChild();
+		}
+		else
+			super_window::main_region(frame_time);
+	}
 };
 
 lak::optional<int> basic_window_preinit(int argc, char **argv)
@@ -123,6 +210,8 @@ void basic_window_init(lak::window &window)
 		default:
 			break;
 	}
+
+	window.set_title(L"binex");
 }
 
 void basic_window_handle_event(lak::window &, lak::event &event)
@@ -130,8 +219,7 @@ void basic_window_handle_event(lak::window &, lak::event &event)
 	switch (event.type)
 	{
 		case lak::event_type::dropfile:
-			// :TODO: do something with the file
-			// event.dropfile().path;
+			load_binary_async(lak::fs::path(event.dropfile().path));
 			break;
 
 		default:
@@ -139,11 +227,17 @@ void basic_window_handle_event(lak::window &, lak::event &event)
 	}
 }
 
-void basic_window_loop(lak::window &, uint64_t counter_delta)
+void basic_window_loop(lak::window &window, uint64_t counter_delta)
 {
 	const float frame_time = (float)counter_delta / lak::performance_frequency();
 
 	main_window::draw(frame_time);
+
+	if (binary_update)
+	{
+		window.set_title(L"binex " + binary_path.generic_wstring());
+		binary_update = false;
+	}
 }
 
 int basic_window_quit(lak::window &) { return 0; }

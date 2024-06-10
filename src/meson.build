@@ -8,6 +8,7 @@ binex_core = static_library(
 	'binex_core',
 	[
 		'core.cpp',
+		'widgets.cpp',
 	],
 	override_options: [
 		'cpp_std=@0@'.format(version),
