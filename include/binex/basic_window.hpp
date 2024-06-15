@@ -1,57 +1,48 @@
 #ifndef BINEX_BASIC_WINDOW_HPP
 #define BINEX_BASIC_WINDOW_HPP
 
-#include <lak/imgui/backend.hpp>
-#include <lak/imgui/widgets.hpp>
+#include <binex/widgets.hpp>
 
-#include <lak/opengl/texture.hpp>
+#include <lak/window.hpp>
 
-#include <lak/bit_reader.hpp>
-#include <lak/span_manip.hpp>
-#include <lak/string_literals.hpp>
+#include <lak/imgui/basic_window.hpp>
 
 namespace bex
 {
 	template<typename DERIVED>
-	struct basic_window
+	struct basic_window : public lak::basic_window<DERIVED>
 	{
-		static void menu_bar(float) {}
-
-		static void left_region(float) {}
-
-		static void right_region(float) {}
-
-		static void main_region(float frame_time)
+		static void file_menu()
 		{
-			const auto content_size{ImGui::GetContentRegionAvail()};
+			static lak::path_getter pgetter;
+			if (auto res = pgetter(); res) DERIVED::open_file(*res);
 
-			static float left_size  = content_size.x / 2;
-			static float right_size = content_size.x / 2;
-
-			lak::VertSplitter(left_size, right_size, content_size.x);
-
-			ImGui::BeginChild(
-			  "Left", {left_size, -1}, true, ImGuiWindowFlags_NoSavedSettings);
-			DERIVED::left_region(frame_time);
-			ImGui::EndChild();
-
-			ImGui::SameLine();
-
-			ImGui::BeginChild(
-			  "Right", {right_size, -1}, true, ImGuiWindowFlags_NoSavedSettings);
-			DERIVED::right_region(frame_time);
-			ImGui::EndChild();
+			if (ImGui::BeginMenu("File"))
+			{
+				if (ImGui::MenuItem("Open...", nullptr, false))
+					pgetter.open_file(DERIVED::file_path());
+				ImGui::EndMenu();
+			}
 		}
 
-		static void draw(float frame_time)
+		static void menu_bar(float)
 		{
-			if (ImGui::BeginMenuBar())
-			{
-				DERIVED::menu_bar(frame_time);
-				ImGui::EndMenuBar();
-			}
+			file_menu();
+			bex::debug_menu();
+		}
 
-			DERIVED::main_region(frame_time);
+		static void left_region(float)
+		{
+			static MemoryEditor editor;
+			lak::span<byte_t> binary = DERIVED::file_data();
+			editor.DrawContents(reinterpret_cast<uint8_t *>(binary.data()),
+			                    binary.size());
+		}
+
+		static void right_region(float)
+		{
+			lak::span<byte_t> binary = DERIVED::file_data();
+			bex::memory_view(binary, DERIVED::graphics_mode(), DERIVED::update());
 		}
 	};
 }

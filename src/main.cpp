@@ -41,36 +41,15 @@ struct main_window : bex::basic_window<main_window>
 {
 	using super_window = bex::basic_window<main_window>;
 
-	static void file_menu()
-	{
-		static lak::path_getter pgetter;
-		if (auto res = pgetter(); res) load_binary_async(*res);
+	static void open_file(const lak::fs::path &path) { load_binary_async(path); }
 
-		if (ImGui::BeginMenu("File"))
-		{
-			if (ImGui::MenuItem("Open...", nullptr, false, !binary_load))
-				pgetter.open_file(binary_path);
-			ImGui::EndMenu();
-		}
-	}
+	static const lak::fs::path &file_path() { return binary_path; }
 
-	static void menu_bar(float)
-	{
-		file_menu();
-		bex::debug_menu();
-	}
+	static lak::span<byte_t> file_data() { return lak::span(binary); }
 
-	static void left_region(float)
-	{
-		static MemoryEditor editor;
-		editor.DrawContents(reinterpret_cast<uint8_t *>(binary.data()),
-		                    binary.size());
-	}
+	static lak::graphics_mode graphics_mode() { return ::graphics_mode; }
 
-	static void right_region(float)
-	{
-		bex::memory_view(binary, graphics_mode, binary_update);
-	}
+	static bool update() { return binary_update; }
 
 	static void main_region(float frame_time)
 	{
