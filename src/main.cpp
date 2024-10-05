@@ -90,7 +90,7 @@ struct main_window : bex::basic_window<main_window>
 	}
 };
 
-lak::optional<int> basic_window_preinit(int argc, char **argv)
+lak::optional<int> basic_program_init(int argc, char **argv)
 {
 	if (argc == 2 && argv[1] == lak::astring("--version"))
 	{
@@ -162,9 +162,24 @@ lak::optional<int> basic_window_preinit(int argc, char **argv)
 	basic_window_opengl_settings.major = 3;
 	basic_window_opengl_settings.minor = 2;
 	basic_window_clear_colour          = {0.0f, 0.0f, 0.0f, 1.0f};
+	basic_imgui_main_window_flags =
+	  ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoScrollbar |
+	  ImGuiWindowFlags_MenuBar | ImGuiWindowFlags_NoSavedSettings |
+	  ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoMove;
+
+	basic_create_window().UNWRAP();
 
 	return lak::nullopt;
 }
+
+bool binex_running = true;
+bool basic_program_loop(uint64_t counter_delta)
+{
+	LAK_UNUSED(counter_delta);
+	return binex_running && !basic_window_instances.empty();
+}
+
+int basic_program_quit() { return EXIT_SUCCESS; }
 
 void basic_window_init(lak::window &window)
 {
@@ -196,10 +211,19 @@ void basic_window_init(lak::window &window)
 	window.set_title(L"binex");
 }
 
-void basic_window_handle_event(lak::window &, lak::event &event)
+void basic_window_handle_event(lak::window *window, lak::event &event)
 {
 	switch (event.type)
 	{
+		case lak::event_type::close_window:
+			basic_destroy_window(*window);
+			ASSERT(!!window);
+			break;
+
+		case lak::event_type::quit_program:
+			binex_running = false;
+			break;
+
 		case lak::event_type::dropfile:
 			load_binary_async(lak::fs::path(event.dropfile().path));
 			break;
@@ -222,4 +246,4 @@ void basic_window_loop(lak::window &window, uint64_t counter_delta)
 	}
 }
 
-int basic_window_quit(lak::window &) { return 0; }
+void basic_window_quit(lak::window &) {}
