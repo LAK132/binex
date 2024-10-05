@@ -14,6 +14,9 @@
 
 #include <filesystem>
 
+#define LAK_BASIC_PROGRAM_IMGUI_WINDOW_IMPL
+#include <lak/basic_program.inl>
+
 int opengl_major, opengl_minor;
 lak::graphics_mode graphics_mode;
 bool force_only_error = false;
