@@ -1,56 +1,57 @@
 project(
-  'binex',
-  ['c', 'cpp'],
-  default_options: [
-    'b_vscrt=static_from_buildtype',
-  ],
+	'binex',
+	['c', 'cpp'],
+	default_options: [
+		'b_vscrt=static_from_buildtype',
+	],
 )
 
 cxx = meson.get_compiler('cpp')
 
 if cxx.get_id() == 'msvc'
-  version = 'c++latest'
+	version = 'c++latest'
 
-  c_cpp_args = [
-    '-DUNICODE',
-    '-DWIN32_LEAN_AND_MEAN',
-    '-DNOMINMAX',
-    '-wd4315',
-    '-wd4366',
-    '-Wv:18',
-  ]
+	c_cpp_args = [
+		'-DUNICODE',
+		'-DWIN32_LEAN_AND_MEAN',
+		'-DNOMINMAX',
+		'-wd4315',
+		'-wd4366',
+		'-Wv:18',
+	]
 
-  cpp_args = [
-    '-Zc:__cplusplus',
-    '-Zc:rvalueCast',
-    '-Zc:wchar_t',
-    '-Zc:ternary',
-    '-Zc:preprocessor',
-  ]
+	cpp_args = [
+		'-Zc:__cplusplus',
+		'-Zc:rvalueCast',
+		'-Zc:wchar_t',
+		'-Zc:ternary',
+		'-Zc:preprocessor',
+	]
 
-  c_args = []
+	c_args = []
 
-  macro_test_args = c_cpp_args + cpp_args + ['-std:' + version]
+	macro_test_args = c_cpp_args + cpp_args + ['-std:' + version]
 else
-  version = 'c++20'
+	version = 'c++20'
 
-  c_cpp_args = [
-    '-Wno-gnu-zero-variadic-macro-arguments',
-    '-Wno-language-extension-token',
-    '-Wno-dangling-else',
-    '-Wno-microsoft-cast',
-    '-Wno-pragma-pack',
-    '-Wno-deprecated-declarations',
-    '-Wno-unused-private-field',
-    '-Wfatal-errors',
-    # '-mavx',
-  ]
+	c_cpp_args = [
+		'-Wno-gnu-zero-variadic-macro-arguments',
+		'-Wno-language-extension-token',
+		'-Wno-dangling-else',
+		'-Wno-microsoft-cast',
+		'-Wno-pragma-pack',
+		'-Wno-deprecated-declarations',
+		'-Wno-unused-private-field',
+		'-Wno-invalid-partial-specialization',
+		'-Wfatal-errors',
+		# '-mavx',
+	]
 
-  cpp_args = []
+	cpp_args = []
 
-  c_args = []
+	c_args = []
 
-  macro_test_args = c_cpp_args + cpp_args + ['-std=' + version]
+	macro_test_args = c_cpp_args + cpp_args + ['-std=' + version]
 endif
 
 c_cpp_args += [
@@ -78,25 +79,25 @@ add_project_arguments(c_cpp_args + cpp_args, language: ['cpp'])
 add_project_arguments(c_cpp_args + c_args, language: ['c'])
 
 if host_machine.system() == 'windows'
-  git_header = custom_target(
-    'generate_git_file',
-    output: 'git.hpp',
-    command: ['generate_git_file.bat', '@OUTPUT@'] ,
-    build_by_default: true,
-  )
+	git_header = custom_target(
+		'generate_git_file',
+		output: 'git.hpp',
+		command: ['generate_git_file.bat', '@OUTPUT@'] ,
+		build_by_default: true,
+	)
 else
-  git_header = custom_target(
-    'generate_git_file',
-    output: 'git.hpp',
-    command: ['./generate_git_file.sh', '@OUTPUT@'] ,
-    build_by_default: true,
-  )
+	git_header = custom_target(
+		'generate_git_file',
+		output: 'git.hpp',
+		command: ['./generate_git_file.sh', '@OUTPUT@'] ,
+		build_by_default: true,
+	)
 endif
 
 cplusplus = cxx.get_define('__cplusplus', args: macro_test_args)
 
 if cxx.compute_int(cplusplus) < 202002
-  error('C++ version insufficient, expected 202002L got ' + cplusplus)
+	error('C++ version insufficient, expected 202002L got ' + cplusplus)
 endif
 
 install_directory = host_machine.cpu_family()
@@ -109,8 +110,8 @@ executable(
 		'src'/'main.cpp',
 		git_header,
 	],
-  install: true,
-  install_dir: install_directory,
+	install: true,
+	install_dir: install_directory,
 	override_options: [
 		'cpp_std=@0@'.format(version),
 		'warning_level=3',
