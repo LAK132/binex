@@ -27,7 +27,7 @@ namespace bex
 
 		static void menu_bar(float)
 		{
-			file_menu();
+			DERIVED::file_menu();
 			bex::debug_menu();
 		}
 
