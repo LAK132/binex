@@ -1,7 +1,3 @@
-lak_subprj = subproject('lak')
-lak_dep = lak_subprj.get_variable('lak_dep')
-lak_libs = lak_subprj.get_variable('system_libraries')
-
 binex_includes = include_directories('..'/'include')
 
 binex_core = static_library(
@@ -10,11 +6,7 @@ binex_core = static_library(
 		'core.cpp',
 		'widgets.cpp',
 	],
-	override_options: [
-		'cpp_std=@0@'.format(version),
-		'warning_level=3',
-		'werror=true',
-	],
+	override_options: override_options_werror,
 	include_directories: binex_includes,
 	dependencies: lak_dep,
 )

@@ -90,7 +90,7 @@ struct main_window : bex::basic_window<main_window>
 	}
 };
 
-lak::optional<int> basic_program_init(int argc, char **argv)
+lak::optional<int> basic_program_preinit(int argc, char **argv)
 {
 	if (argc == 2 && argv[1] == lak::astring("--version"))
 	{
@@ -167,8 +167,12 @@ lak::optional<int> basic_program_init(int argc, char **argv)
 	  ImGuiWindowFlags_MenuBar | ImGuiWindowFlags_NoSavedSettings |
 	  ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoMove;
 
-	basic_create_window().UNWRAP();
+	return lak::nullopt;
+}
 
+lak::optional<int> basic_program_init()
+{
+	basic_create_window().UNWRAP();
 	return lak::nullopt;
 }
 
