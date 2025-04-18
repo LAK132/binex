@@ -50,8 +50,8 @@ executable(
 		'src'/'main.cpp',
 		git_header,
 	],
-  install: true,
-  install_dir: install_directory,
+	install: true,
+	install_dir: install_directory,
 	override_options: override_options_werror,
 	include_directories: binex_includes,
 	dependencies: [
