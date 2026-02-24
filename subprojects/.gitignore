@@ -1,12 +1,17 @@
 packagecache/**
 
+Cobalt/
 glm/
 imgui/
+imgui_club/
 SDL2/
 stb/
 *-wrap/
 
+Cobalt.wrap
 glm*.wrap
+ImFileDialog.wrap
 imgui*.wrap
 SDL2*.wrap
+stb*.wrap
 *-wrap.wrap

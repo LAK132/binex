@@ -4,8 +4,9 @@
 #include <lak/defer.hpp>
 
 #include <lak/imgui/backend.hpp>
+#include <lak/imgui/widgets.hpp>
 
-#include <misc/memory_editor/imgui_memory_editor.h>
+#include <imgui_memory_editor.h>
 
 bool bex::memory_region_selector::draw(lak::span<byte_t> data,
                                        lak::span<byte_t> &view_data,
@@ -105,98 +106,7 @@ bool bex::memory_region_selector::draw(lak::span<byte_t> data,
 	return updated;
 }
 
-bex::texture bex::create_texture(const lak::image4_t &bitmap,
-                                 const lak::graphics_mode mode)
-{
-	// FUNCTION_CHECKPOINT();
-
-	if (mode == lak::graphics_mode::OpenGL)
-	{
-		// auto old_texture =
-		//   lak::opengl::get_uint<1>(GL_TEXTURE_BINDING_2D).UNWRAP();
-
-		lak::opengl::texture result(GL_TEXTURE_2D);
-		result.bind()
-		  .apply(GL_TEXTURE_WRAP_S, GL_CLAMP_TO_BORDER)
-		  .apply(GL_TEXTURE_WRAP_T, GL_CLAMP_TO_BORDER)
-		  .apply(GL_TEXTURE_MIN_FILTER, GL_LINEAR)
-		  .apply(GL_TEXTURE_MAG_FILTER, GL_NEAREST)
-		  .build(0,
-		         GL_RGBA,
-		         (lak::vec2<GLsizei>)bitmap.size(),
-		         0,
-		         GL_RGBA,
-		         GL_UNSIGNED_BYTE,
-		         bitmap.data());
-
-		// glBindTexture(GL_TEXTURE_2D, old_texture);
-
-		return result;
-	}
-	else if (mode == lak::graphics_mode::Software)
-	{
-		texture_color32_t result;
-		result.copy(bitmap.size().x, bitmap.size().y, (color32_t *)bitmap.data());
-		return result;
-	}
-	else
-	{
-		FATAL("Unknown graphics mode: ", (uintmax_t)mode);
-		// return lak::monostate{};
-	}
-}
-
-bex::texture bex::create_texture(const lak::image<float> &bitmap,
-                                 const lak::graphics_mode mode)
-{
-	// FUNCTION_CHECKPOINT();
-
-	if (mode == lak::graphics_mode::OpenGL)
-	{
-		// auto old_texture =
-		//   lak::opengl::get_uint<1>(GL_TEXTURE_BINDING_2D).UNWRAP();
-
-		lak::opengl::texture result(GL_TEXTURE_2D);
-		result.bind()
-		  .apply(GL_TEXTURE_WRAP_S, GL_CLAMP_TO_BORDER)
-		  .apply(GL_TEXTURE_WRAP_T, GL_CLAMP_TO_BORDER)
-		  .apply(GL_TEXTURE_MIN_FILTER, GL_LINEAR)
-		  .apply(GL_TEXTURE_MAG_FILTER, GL_NEAREST)
-		  .build(0,
-		         GL_RED,
-		         (lak::vec2<GLsizei>)bitmap.size(),
-		         0,
-		         GL_RED,
-		         GL_FLOAT,
-		         bitmap.data());
-
-		// glBindTexture(GL_TEXTURE_2D, old_texture);
-
-		return result;
-	}
-	else if (mode == lak::graphics_mode::Software)
-	{
-		texture_color32_t result;
-		result.init(bitmap.size().x, bitmap.size().y);
-		for (size_t y = 0; y < bitmap.size().y; ++y)
-			for (size_t x = 0; x < bitmap.size().x; ++x)
-			{
-				result.at(x, y).r = uint8_t(
-				  std::min<uint64_t>(uint64_t(bitmap[lak::vec2s_t{x, y}] * 256), 255));
-				result.at(x, y).g = 0;
-				result.at(x, y).b = 0;
-				result.at(x, y).a = 255;
-			}
-		return result;
-	}
-	else
-	{
-		FATAL("Unknown graphics mode: ", (uintmax_t)mode);
-		// return lak::monostate{};
-	}
-}
-
-void bex::image_view(const bex::texture &texture, const float scale)
+void bex::image_view(ImTextureRef texture, const float scale)
 {
 	ImGui::BeginChild("Image View",
 	                  ImVec2(0, 0),
@@ -205,41 +115,9 @@ void bex::image_view(const bex::texture &texture, const float scale)
 	                    ImGuiWindowFlags_AlwaysVerticalScrollbar |
 	                    ImGuiWindowFlags_AlwaysHorizontalScrollbar);
 
-	// :TODO: double check that the window is in the correct graphics mode
+	lak::vec2s_t size = lak::TextureSize(texture);
 
-	if (const auto glimg = texture.template get<lak::opengl::texture>(); glimg)
-	{
-		if (!glimg->get())
-		{
-			ImGui::Text("No image selected.");
-		}
-		else
-		{
-			ImGui::Image((ImTextureID)(uintptr_t)glimg->get(),
-			             ImVec2(scale * (float)glimg->size().x,
-			                    scale * (float)glimg->size().y));
-		}
-	}
-	else if (const auto srimg = texture.template get<texture_color32_t>(); srimg)
-	{
-		if (!srimg->pixels)
-		{
-			ImGui::Text("No image selected.");
-		}
-		else
-		{
-			ImGui::Image((ImTextureID)(uintptr_t)&srimg,
-			             ImVec2(scale * (float)srimg->w, scale * (float)srimg->h));
-		}
-	}
-	else if (texture.template holds<lak::monostate>())
-	{
-		ImGui::Text("No image selected.");
-	}
-	else
-	{
-		ERROR("Invalid texture type");
-	}
+	ImGui::Image(texture, ImVec2(scale * size.x, scale * size.y));
 
 	ImGui::EndChild();
 }
@@ -249,8 +127,7 @@ void image_memory_view_impl(lak::span<byte_t> data,
                             lak::vec3u64_t &block_skip,
                             lak::span<int, 4> rgbx_bit_count,
                             bex::pixel_layout &pixel_layout,
-                            bex::texture &texture,
-                            lak::graphics_mode graphics_mode,
+                            ImTextureRef &texture,
                             float &scale,
                             bool &update)
 {
@@ -412,7 +289,7 @@ void image_memory_view_impl(lak::span<byte_t> data,
 		                             &skipMax);
 	}
 
-	update |= texture.template holds<lak::monostate>();
+	update |= texture.GetTexID() == ImTextureID_Invalid;
 
 	if (update)
 	{
@@ -629,9 +506,7 @@ void image_memory_view_impl(lak::span<byte_t> data,
 				}
 				break;
 
-			default:
-				ASSERT_NYI();
-				break;
+			default: ASSERT_NYI(); break;
 		}
 
 #if 0
@@ -691,10 +566,10 @@ void image_memory_view_impl(lak::span<byte_t> data,
 			};
 #endif
 
-		texture = bex::create_texture(image, graphics_mode);
+		texture = lak::CreateTexture(image);
 	}
 
-	if (!texture.template holds<lak::monostate>())
+	if (texture.GetTexID() != ImTextureID_Invalid)
 	{
 		ImGui::Separator();
 		ImGui::DragFloat("Scale", &scale, 0.1f, 0.1f, 10.0f);
@@ -704,19 +579,13 @@ void image_memory_view_impl(lak::span<byte_t> data,
 	}
 }
 
-void bex::memory_image_view(lak::span<byte_t> data,
-                            lak::graphics_mode graphics_mode,
-                            bool update)
+bex::memory_image_viewer::~memory_image_viewer()
 {
-	static lak::vec2u64_t image_size = {256, 256};
-	static lak::vec3u64_t block_skip = {0, 1, 0};
-	static bex::texture texture;
-	static float scale                       = 1.0f;
-	static lak::array<int, 4> rgbx_bit_count = {8, 8, 8, 0};
-	static bex::pixel_layout pixel_layout    = bex::pixel_layout::rgb;
-	static lak::span<byte_t> old_data        = data;
-	static lak::span<byte_t> image_data      = data;
+	if (texture.GetTexID() != ImTextureID_Invalid) lak::DestroyTexture(texture);
+}
 
+void bex::memory_image_viewer::draw(lak::span<byte_t> data, bool update)
+{
 	if (data.empty() && old_data.empty()) return;
 
 	if (!data.empty() && !lak::same_span<byte_t>(data, old_data))
@@ -752,7 +621,6 @@ void bex::memory_image_view(lak::span<byte_t> data,
 	// 	}
 	// }
 
-	static bex::memory_region_selector view;
 	update |= view.draw(data, image_data, update);
 
 	ImGui::Separator();
@@ -763,22 +631,20 @@ void bex::memory_image_view(lak::span<byte_t> data,
 	                       rgbx_bit_count,
 	                       pixel_layout,
 	                       texture,
-	                       graphics_mode,
 	                       scale,
 	                       update);
 }
 
 void byte_pairs_memory_view_impl(lak::span<byte_t> data,
-                                 bex::texture &texture,
-                                 lak::graphics_mode graphics_mode,
+                                 ImTextureRef &texture,
                                  float &scale,
                                  bool &update)
 {
-	update |= texture.template holds<lak::monostate>();
+	update |= texture.GetTexID() == ImTextureID_Invalid;
 
 	if (update)
 	{
-		static lak::image<GLfloat> image{lak::vec2s_t{256, 256}};
+		thread_local static lak::image<float> image{lak::vec2s_t{256, 256}};
 
 		image.fill(0.0f);
 
@@ -786,15 +652,15 @@ void byte_pairs_memory_view_impl(lak::span<byte_t> data,
 		const auto end   = data.end();
 		auto it          = begin;
 
-		const GLfloat step = 1.0f / (data.size() / float(image.contig_size()));
+		const float step = 1.0f / (data.size() / float(image.contig_size()));
 		for (uint8_t prev = (it != end ? uint8_t(*it) : 0); it != end;
 		     prev         = uint8_t(*(it++)))
       image[{prev, uint8_t(*it)}] += step;
 
-		texture = bex::create_texture(image, graphics_mode);
+		texture = lak::CreateTexture(image);
 	}
 
-	if (!texture.template holds<lak::monostate>())
+	if (texture.GetTexID() != ImTextureID_Invalid)
 	{
 		ImGui::DragFloat("Scale", &scale, 0.1f, 0.1f, 10.0f);
 		ImGui::Separator();
@@ -802,15 +668,13 @@ void byte_pairs_memory_view_impl(lak::span<byte_t> data,
 	}
 }
 
-void bex::memory_byte_pairs_view(lak::span<byte_t> data,
-                                 lak::graphics_mode graphics_mode,
-                                 bool update)
+bex::memory_byte_pairs_viewer::~memory_byte_pairs_viewer()
 {
-	static bex::texture texture;
-	static float scale                  = 1.0f;
-	static lak::span<byte_t> old_data   = data;
-	static lak::span<byte_t> image_data = data;
+	if (texture.GetTexID() != ImTextureID_Invalid) lak::DestroyTexture(texture);
+}
 
+void bex::memory_byte_pairs_viewer::draw(lak::span<byte_t> data, bool update)
+{
 	if (data.empty() && old_data.empty()) return;
 
 	if (!data.empty() && !lak::same_span<byte_t>(data, old_data))
@@ -845,29 +709,15 @@ void bex::memory_byte_pairs_view(lak::span<byte_t> data,
 	// 	}
 	// }
 
-	static bex::memory_region_selector view;
 	update |= view.draw(data, image_data, update);
 
 	ImGui::Separator();
 
-	byte_pairs_memory_view_impl(
-	  image_data, texture, graphics_mode, scale, update);
+	byte_pairs_memory_view_impl(image_data, texture, scale, update);
 }
 
-enum memory_view_content_mode : int
+void bex::memory_viewer::draw(lak::span<byte_t> data, bool update)
 {
-	VIEW_DATA_BINARY,
-	VIEW_DATA_BYTE_PAIRS,
-	VIEW_DATA_IMAGE,
-};
-
-void bex::memory_view(lak::span<byte_t> data,
-                      lak::graphics_mode graphics_mode,
-                      bool update)
-{
-	static MemoryEditor editor;
-	static memory_view_content_mode content_mode;
-
 	update |=
 	  ImGui::RadioButton("Binary", (int *)&content_mode, VIEW_DATA_BINARY);
 	ImGui::SameLine();
@@ -885,17 +735,11 @@ void bex::memory_view(lak::span<byte_t> data,
 			                    data.size());
 			break;
 
-		case VIEW_DATA_BYTE_PAIRS:
-			bex::memory_byte_pairs_view(data, graphics_mode, update);
-			break;
+		case VIEW_DATA_BYTE_PAIRS: byte_pairs_viewer.draw(data, update); break;
 
-		case VIEW_DATA_IMAGE:
-			bex::memory_image_view(data, graphics_mode, update);
-			break;
+		case VIEW_DATA_IMAGE: image_viewer.draw(data, update); break;
 
-		default:
-			content_mode = VIEW_DATA_BINARY;
-			break;
+		default: content_mode = VIEW_DATA_BINARY; break;
 	}
 }
 

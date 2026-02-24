@@ -5,11 +5,9 @@
 
 #include <lak/imgui/widgets.hpp>
 
-#include <lak/opengl/state.hpp>
-
-#include <lak/file.hpp>
 #include <lak/future.hpp>
 #include <lak/strconv.hpp>
+#include <lak/system/file.hpp>
 #include <lak/test.hpp>
 
 #include <filesystem>
@@ -17,50 +15,46 @@
 #define LAK_BASIC_PROGRAM_IMGUI_WINDOW_IMPL
 #include <lak/basic_program.inl>
 
-int opengl_major, opengl_minor;
-lak::graphics_mode graphics_mode;
-bool force_only_error = false;
-
-lak::fs::path binary_path;
-lak::optional<lak::future<void>> binary_load;
-lak::array<byte_t> binary;
-bool binary_update;
-
-void load_binary(lak::fs::path path)
-{
-	if (auto res = lak::read_file(path); res.is_ok())
-		binary = lak::move(res.unsafe_unwrap());
-	else
-		ERROR(res.unsafe_unwrap_err());
-	binary_path = lak::move(path);
-}
-
-void load_binary_async(const lak::fs::path &path)
-{
-	binary_load = lak::async(load_binary, path);
-}
-
 struct main_window : bex::basic_window<main_window>
 {
 	using super_window = bex::basic_window<main_window>;
 
-	static void open_file(const lak::fs::path &path) { load_binary_async(path); }
+	lak::fs::path binary_path;
+	lak::optional<lak::future<void>> binary_load;
+	lak::array<byte_t> binary;
+	bool binary_update;
 
-	static const lak::fs::path &file_path() { return binary_path; }
+	void _load_binary(lak::fs::path path)
+	{
+		if (auto res = lak::read_file(path); res.is_ok())
+			binary = lak::move(res.unsafe_unwrap());
+		else
+			ERROR(res.unsafe_unwrap_err());
+		binary_path = lak::move(path);
+	}
 
-	static lak::span<byte_t> file_data() { return lak::span(binary); }
+	void open_file(const lak::fs::path &path)
+	{
+		binary_load = lak::async([](main_window *w, const lak::fs::path &p)
+		                         { w->_load_binary(p); },
+		                         this,
+		                         path);
+	}
 
-	static lak::graphics_mode graphics_mode() { return ::graphics_mode; }
+	const lak::fs::path &file_path() { return binary_path; }
 
-	static bool update() { return binary_update; }
+	lak::span<byte_t> file_data() { return lak::span(binary); }
 
-	static void main_region(float frame_time)
+	bool update() { return binary_update; }
+
+	float time_acc = 0.0f;
+
+	void main_region(float frame_time)
 	{
 		if (binary_load)
 		{
 			ImGui::BeginChild(
 			  "Mid", {-1, -1}, true, ImGuiWindowFlags_NoSavedSettings);
-			static float time_acc = 0.0f;
 			time_acc += frame_time;
 			if (time_acc > 3.0f) time_acc -= std::trunc(time_acc);
 			if (time_acc > 2.0f)
@@ -90,38 +84,78 @@ struct main_window : bex::basic_window<main_window>
 	}
 };
 
-lak::optional<int> basic_program_preinit(int argc, char **argv)
+struct my_window : virtual public LAK_BASIC_PROGRAM(window_api)
 {
-	if (argc == 2 && argv[1] == lak::astring("--version"))
+	my_window() : LAK_BASIC_PROGRAM(window_api)() {}
+
+	main_window bex_window;
+
+	virtual void init() override final { window().set_title(L"" APP_NAME); }
+
+	virtual ~my_window() {}
+
+	virtual void handle_event(lak::event &event) override final
+	{
+		switch (event.type)
+		{
+			case lak::event_type::close_window: destroy(); break;
+			case lak::event_type::dropfile:
+				bex_window.open_file(event.dropfile().path);
+				break;
+		}
+	}
+
+	virtual void loop(uint64_t counter_delta) override final
+	{
+		const float frame_time =
+		  (float)counter_delta / lak::performance_frequency();
+		bex_window.draw(frame_time);
+		if (bex_window.binary_update)
+		{
+			window().set_title(L"" APP_NAME " " +
+			                   bex_window.binary_path.generic_wstring());
+			bex_window.binary_update = false;
+		}
+	}
+};
+
+lak::error_code<int> LAK_BASIC_PROGRAM(program_preinit)(lak::span<char *> args)
+{
+	if (args.size() == 2 && args[1] == lak::astring("--version"))
 	{
 		std::cout << APP_NAME << "\n";
-		return lak::optional<int>(0);
+		return lak::err_t{0};
 	}
 
 	lak::debugger.std_out(u8"", u8"" APP_NAME "\n");
 
-	for (int arg = 1; arg < argc; ++arg)
+	lak::debugger.crash_path = std::filesystem::current_path() /
+	                           "ATTACH-TO-ISSUE-ON-BINEX-GITHUB-REPO.txt";
+
+	lak::debugger.live_output_enabled = true;
+
+	for (int arg = 1; arg < args.size(); ++arg)
 	{
-		if (argv[arg] == lak::astring("-h") || argv[arg] == lak::astring("--help"))
+		if (args[arg] == lak::astring("-h") || args[arg] == lak::astring("--help"))
 		{
-			std::cout << "binex.exe "
+			std::cout << "binex "
 			             "[--help] "
 			             "[--nogl] "
 			             "[--onlyerr] "
 			             "[--listtests | --laktestall | --laktests \"test1;test2\"] "
 			             "[<filepath>]\n";
 
-			return lak::optional<int>(0);
+			return lak::err_t{0};
 		}
-		else if (argv[arg] == lak::astring("--nogl"))
+		else if (args[arg] == lak::astring("--nogl"))
 		{
 			basic_window_force_software = true;
 		}
-		else if (argv[arg] == lak::astring("--onlyerr"))
+		else if (args[arg] == lak::astring("--onlyerr"))
 		{
-			force_only_error = true;
+			lak::debugger.live_errors_only = true;
 		}
-		else if (argv[arg] == lak::astring("--listtests"))
+		else if (args[arg] == lak::astring("--listtests"))
 		{
 			lak::debugger.std_out(lak::u8string(),
 			                      lak::u8string(u8"Available tests:\n"));
@@ -131,26 +165,26 @@ lak::optional<int> basic_program_preinit(int argc, char **argv)
 				                      lak::to_u8string(name) + u8"\n");
 			}
 		}
-		else if (argv[arg] == lak::astring("--laktestall"))
+		else if (args[arg] == lak::astring("--laktestall"))
 		{
-			return lak::optional<int>(lak::run_tests());
+			return lak::err_t{lak::run_tests()};
 		}
-		else if (argv[arg] == lak::astring("--laktests") ||
-		         argv[arg] == lak::astring("--laktest"))
+		else if (args[arg] == lak::astring("--laktests") ||
+		         args[arg] == lak::astring("--laktest"))
 		{
 			++arg;
-			if (arg >= argc) FATAL("Missing tests");
-			return lak::optional<int>(lak::run_tests(
-			  lak::as_u8string(lak::astring_view::from_c_str(argv[arg]))));
+			if (arg >= args.size()) FATAL("Missing tests");
+			return lak::err_t{lak::run_tests(
+			  lak::as_u8string(lak::astring_view::from_c_str(args[arg])))};
 		}
 		else
 		{
-			if (lak::path_exists(argv[arg]).UNWRAP())
+			if (lak::path_exists(args[arg]).UNWRAP())
 			{
 				// :TODO: do something with the file
 			}
 			else
-				FATAL("file ", argv[arg], " does not exists");
+				FATAL("file ", args[arg], " does not exists");
 		}
 	}
 
@@ -158,96 +192,64 @@ lak::optional<int> basic_program_preinit(int argc, char **argv)
 	basic_window_force_software = true;
 #endif
 
-	basic_window_target_framerate      = 30;
-	basic_window_opengl_settings.major = 3;
-	basic_window_opengl_settings.minor = 2;
-	basic_window_clear_colour          = {0.0f, 0.0f, 0.0f, 1.0f};
-	basic_imgui_main_window_flags =
-	  ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoScrollbar |
-	  ImGuiWindowFlags_MenuBar | ImGuiWindowFlags_NoSavedSettings |
-	  ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoMove;
+	basic_window_target_framerate = 30;
 
-	return lak::nullopt;
+	return lak::ok_t{};
 }
 
-lak::optional<int> basic_program_init()
+lak::weak_ptr<LAK_BASIC_PROGRAM(window_instance<my_window>)> my_window_ptr;
+
+lak::error_code<int> LAK_BASIC_PROGRAM(program_init)()
 {
-	basic_create_window().UNWRAP();
-	return lak::nullopt;
-}
-
-bool binex_running = true;
-bool basic_program_loop(uint64_t counter_delta)
-{
-	LAK_UNUSED(counter_delta);
-	return binex_running && !basic_window_instances.empty();
-}
-
-int basic_program_quit() { return EXIT_SUCCESS; }
-
-void basic_window_init(lak::window &window)
-{
-	lak::debugger.crash_path =
-	  std::filesystem::current_path() /
-	  "ATTACH-TO-ISSUE-ON-SOURCE-EXPLORER-GITHUB-REPO.txt";
-
-	lak::debugger.live_output_enabled = true;
-
-	graphics_mode = window.graphics();
-
-	DEBUG("Graphics: ", graphics_mode);
-	if (!lak::debugger.live_output_enabled || lak::debugger.live_errors_only)
-		std::cout << "Graphics: " << graphics_mode << "\n";
-
-	switch (graphics_mode)
+	auto map_str_err = [](lak::u8string err) -> int
 	{
-		case lak::graphics_mode::OpenGL:
-		{
-			opengl_major = lak::opengl::get_uint(GL_MAJOR_VERSION).UNWRAP();
-			opengl_minor = lak::opengl::get_uint(GL_MINOR_VERSION).UNWRAP();
-		}
-		break;
+		ERROR(err);
+		return EXIT_FAILURE;
+	};
 
-		default:
-			break;
+	RES_TRY_ASSIGN(
+	  my_window_ptr =,
+	  LAK_BASIC_PROGRAM(create_window<my_window>)().map_err(map_str_err));
+
+	{
+		auto ptr = my_window_ptr.get();
+		ASSERT(!!ptr);
+		ptr->clear_colour = {0.0f, 0.0f, 0.0f, 1.0f};
+		ptr->imgui_window_flags =
+		  ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoScrollbar |
+		  ImGuiWindowFlags_MenuBar | ImGuiWindowFlags_NoSavedSettings |
+		  ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoMove;
+		DEBUG_EXPR(ptr->window().graphics());
 	}
 
-	window.set_title(L"binex");
+	return lak::ok_t{};
 }
 
-void basic_window_handle_event(lak::window *window, lak::event &event)
+void LAK_BASIC_PROGRAM(program_handle_event)(lak::event &event)
 {
 	switch (event.type)
 	{
-		case lak::event_type::close_window:
-			basic_destroy_window(*window);
-			ASSERT(!!window);
-			break;
-
 		case lak::event_type::quit_program:
-			binex_running = false;
+			if (auto ptr = my_window_ptr.get(); ptr)
+			{
+				ptr->destroy();
+				my_window_ptr.reset();
+			}
 			break;
 
-		case lak::event_type::dropfile:
-			load_binary_async(lak::fs::path(event.dropfile().path));
-			break;
-
-		default:
-			break;
+		default: break;
 	}
 }
 
-void basic_window_loop(lak::window &window, uint64_t counter_delta)
+bool LAK_BASIC_PROGRAM(program_loop)(uint64_t counter_delta)
 {
-	const float frame_time = (float)counter_delta / lak::performance_frequency();
-
-	main_window::draw(frame_time);
-
-	if (binary_update)
-	{
-		window.set_title(L"binex " + binary_path.generic_wstring());
-		binary_update = false;
-	}
+	LAK_UNUSED(counter_delta);
+	return !LAK_BASIC_PROGRAM(window_instances)().empty();
 }
 
-void basic_window_quit(lak::window &) {}
+int LAK_BASIC_PROGRAM(program_quit)()
+{
+	my_window_ptr.reset();
+
+	return EXIT_SUCCESS;
+}

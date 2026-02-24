@@ -4,11 +4,10 @@
 #include <lak/image.hpp>
 #include <lak/span.hpp>
 #include <lak/stdint.hpp>
-#include <lak/window.hpp>
 
-#include <lak/opengl/texture.hpp>
-#include <misc/memory_editor/imgui_memory_editor.h>
-#include <misc/softraster/texture.h>
+#include <lak/system/windowing/window.hpp>
+
+#include <imgui_memory_editor.h>
 
 namespace bex
 {
@@ -40,28 +39,54 @@ namespace bex
 		bayer_gbrg,
 	};
 
-	using texture =
-	  lak::variant<lak::monostate, lak::opengl::texture, texture_color32_t>;
+	struct memory_image_viewer
+	{
+		lak::vec2u64_t image_size = {256, 256};
+		lak::vec3u64_t block_skip = {0, 1, 0};
+		ImTextureRef texture;
+		float scale                       = 1.0f;
+		lak::array<int, 4> rgbx_bit_count = {8, 8, 8, 0};
+		bex::pixel_layout pixel_layout    = bex::pixel_layout::rgb;
+		lak::span<byte_t> old_data;
+		lak::span<byte_t> image_data;
+		bex::memory_region_selector view;
 
-	bex::texture create_texture(const lak::image4_t &bitmap,
-	                            const lak::graphics_mode mode);
+		~memory_image_viewer();
 
-	bex::texture create_texture(const lak::image<float> &bitmap,
-	                            const lak::graphics_mode mode);
+		void draw(lak::span<byte_t> data, bool force_update);
+	};
 
-	void image_view(const bex::texture &texture, const float scale);
+	struct memory_byte_pairs_viewer
+	{
+		ImTextureRef texture;
+		float scale = 1.0f;
+		lak::span<byte_t> old_data;
+		lak::span<byte_t> image_data;
+		bex::memory_region_selector view;
 
-	void memory_image_view(lak::span<byte_t> data,
-	                       lak::graphics_mode graphics_mode,
-	                       bool update);
+		~memory_byte_pairs_viewer();
 
-	void memory_byte_pairs_view(lak::span<byte_t> data,
-	                            lak::graphics_mode graphics_mode,
-	                            bool update);
+		void draw(lak::span<byte_t> data, bool force_update);
+	};
 
-	void memory_view(lak::span<byte_t> data,
-	                 lak::graphics_mode graphics_mode,
-	                 bool update);
+	struct memory_viewer
+	{
+		enum memory_view_content_mode : int
+		{
+			VIEW_DATA_BINARY,
+			VIEW_DATA_BYTE_PAIRS,
+			VIEW_DATA_IMAGE,
+		};
+
+		memory_view_content_mode content_mode;
+		MemoryEditor editor;
+		memory_image_viewer image_viewer;
+		memory_byte_pairs_viewer byte_pairs_viewer;
+
+		void draw(lak::span<byte_t> data, bool force_update);
+	};
+
+	void image_view(ImTextureRef texture, const float scale);
 
 	void debug_log_view();
 
