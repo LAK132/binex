@@ -3,10 +3,13 @@
 #include "binex/basic_window.hpp"
 #include "binex/widgets.hpp"
 
+#include <lak/imgui/texture.hpp>
 #include <lak/imgui/widgets.hpp>
 
 #include <lak/future.hpp>
 #include <lak/strconv.hpp>
+#include <lak/string_literals/string.hpp>
+#include <lak/string_literals/view.hpp>
 #include <lak/system/file.hpp>
 #include <lak/test.hpp>
 
@@ -22,7 +25,8 @@ struct main_window : bex::basic_window<main_window>
 	lak::fs::path binary_path;
 	lak::optional<lak::future<void>> binary_load;
 	lak::array<byte_t> binary;
-	bool binary_update;
+	bool binary_update = false;
+	float time_acc     = 0.0f;
 
 	void _load_binary(lak::fs::path path)
 	{
@@ -35,10 +39,8 @@ struct main_window : bex::basic_window<main_window>
 
 	void open_file(const lak::fs::path &path)
 	{
-		binary_load = lak::async([](main_window *w, const lak::fs::path &p)
-		                         { w->_load_binary(p); },
-		                         this,
-		                         path);
+		binary_load =
+		  lak::async([this](const lak::fs::path &p) { _load_binary(p); }, path);
 	}
 
 	const lak::fs::path &file_path() { return binary_path; }
@@ -46,8 +48,6 @@ struct main_window : bex::basic_window<main_window>
 	lak::span<byte_t> file_data() { return lak::span(binary); }
 
 	bool update() { return binary_update; }
-
-	float time_acc = 0.0f;
 
 	void main_region(float frame_time)
 	{
@@ -119,12 +119,16 @@ struct my_window : virtual public LAK_BASIC_PROGRAM(window_api)
 	}
 };
 
+lak::graphics_mode forced_graphics_mode = lak::graphics_mode::None;
+
 lak::error_code<int> LAK_BASIC_PROGRAM(program_preinit)(lak::span<char *> args)
 {
-	if (args.size() == 2 && args[1] == lak::astring("--version"))
+	if (!args.empty()) args = args.subspan(1U);
+
+	if (args.size() == 1U && args[0] == "--version"_str)
 	{
 		std::cout << APP_NAME << "\n";
-		return lak::err_t{0};
+		return lak::err_t{EXIT_SUCCESS};
 	}
 
 	lak::debugger.std_out(u8"", u8"" APP_NAME "\n");
@@ -134,28 +138,36 @@ lak::error_code<int> LAK_BASIC_PROGRAM(program_preinit)(lak::span<char *> args)
 
 	lak::debugger.live_output_enabled = true;
 
-	for (int arg = 1; arg < args.size(); ++arg)
+	for (size_t arg = 0U; arg < args.size(); ++arg)
 	{
-		if (args[arg] == lak::astring("-h") || args[arg] == lak::astring("--help"))
+		if (args[arg] == "-h"_str || args[arg] == "--help"_str)
 		{
 			std::cout << "binex "
 			             "[--help] "
-			             "[--nogl] "
+			             "[--software | --opengl | --cobalt] "
 			             "[--onlyerr] "
 			             "[--listtests | --laktestall | --laktests \"test1;test2\"] "
 			             "[<filepath>]\n";
 
 			return lak::err_t{0};
 		}
-		else if (args[arg] == lak::astring("--nogl"))
+		else if (args[arg] == "--software"_str)
 		{
-			basic_window_force_software = true;
+			forced_graphics_mode = lak::graphics_mode::Software;
 		}
-		else if (args[arg] == lak::astring("--onlyerr"))
+		else if (args[arg] == "--opengl"_str)
+		{
+			forced_graphics_mode = lak::graphics_mode::OpenGL;
+		}
+		else if (args[arg] == "--cobalt"_str)
+		{
+			forced_graphics_mode = lak::graphics_mode::Cobalt;
+		}
+		else if (args[arg] == "--onlyerr"_str)
 		{
 			lak::debugger.live_errors_only = true;
 		}
-		else if (args[arg] == lak::astring("--listtests"))
+		else if (args[arg] == "--listtests"_str)
 		{
 			lak::debugger.std_out(lak::u8string(),
 			                      lak::u8string(u8"Available tests:\n"));
@@ -165,12 +177,11 @@ lak::error_code<int> LAK_BASIC_PROGRAM(program_preinit)(lak::span<char *> args)
 				                      lak::to_u8string(name) + u8"\n");
 			}
 		}
-		else if (args[arg] == lak::astring("--laktestall"))
+		else if (args[arg] == "--laktestall"_str)
 		{
 			return lak::err_t{lak::run_tests()};
 		}
-		else if (args[arg] == lak::astring("--laktests") ||
-		         args[arg] == lak::astring("--laktest"))
+		else if (args[arg] == "--laktests"_str || args[arg] == "--laktest"_str)
 		{
 			++arg;
 			if (arg >= args.size()) FATAL("Missing tests");
@@ -188,10 +199,6 @@ lak::error_code<int> LAK_BASIC_PROGRAM(program_preinit)(lak::span<char *> args)
 		}
 	}
 
-#ifdef LAK_OS_APPLE
-	basic_window_force_software = true;
-#endif
-
 	basic_window_target_framerate = 30;
 
 	return lak::ok_t{};
@@ -207,20 +214,52 @@ lak::error_code<int> LAK_BASIC_PROGRAM(program_init)()
 		return EXIT_FAILURE;
 	};
 
-	RES_TRY_ASSIGN(
-	  my_window_ptr =,
-	  LAK_BASIC_PROGRAM(create_window<my_window>)().map_err(map_str_err));
-
+	switch (forced_graphics_mode)
 	{
-		auto ptr = my_window_ptr.get();
-		ASSERT(!!ptr);
-		ptr->clear_colour = {0.0f, 0.0f, 0.0f, 1.0f};
-		ptr->imgui_window_flags =
-		  ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoScrollbar |
-		  ImGuiWindowFlags_MenuBar | ImGuiWindowFlags_NoSavedSettings |
-		  ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoMove;
-		DEBUG_EXPR(ptr->window().graphics());
+		case lak::graphics_mode::None:
+		{
+			RES_TRY_ASSIGN(
+			  my_window_ptr =,
+			  LAK_BASIC_PROGRAM(create_window<my_window>)().map_err(map_str_err));
+		}
+		break;
+#ifdef LAK_ENABLE_SOFTRENDER
+		case lak::graphics_mode::Software:
+		{
+			RES_TRY_ASSIGN(my_window_ptr =,
+			               LAK_BASIC_PROGRAM(create_window<my_window>)(
+			                 LAK_BASIC_PROGRAM(window_software_settings))
+			                 .map_err(map_str_err));
+		}
+		break;
+#endif
+#ifdef LAK_ENABLE_OPENGL
+		case lak::graphics_mode::OpenGL:
+		{
+			RES_TRY_ASSIGN(my_window_ptr =,
+			               LAK_BASIC_PROGRAM(create_window<my_window>)(
+			                 LAK_BASIC_PROGRAM(window_opengl_settings))
+			                 .map_err(map_str_err));
+		}
+		break;
+#endif
+#ifdef LAK_ENABLE_COBALT
+		case lak::graphics_mode::Cobalt:
+		{
+			RES_TRY_ASSIGN(my_window_ptr =,
+			               LAK_BASIC_PROGRAM(create_window<my_window>)(
+			                 LAK_BASIC_PROGRAM(window_cobalt_settings))
+			                 .map_err(map_str_err));
+		}
+		break;
+#endif
+		default:
+			ERROR(
+			  lak::fmt<u8"Graphics mode {} not available">(forced_graphics_mode));
+			return lak::err_t{EXIT_FAILURE};
 	}
+
+	DEBUG_EXPR(my_window_ptr.get()->window().graphics());
 
 	return lak::ok_t{};
 }
@@ -230,11 +269,7 @@ void LAK_BASIC_PROGRAM(program_handle_event)(lak::event &event)
 	switch (event.type)
 	{
 		case lak::event_type::quit_program:
-			if (auto ptr = my_window_ptr.get(); ptr)
-			{
-				ptr->destroy();
-				my_window_ptr.reset();
-			}
+			for (auto &inst : basic_window_instances()) inst->destroy();
 			break;
 
 		default: break;
@@ -250,6 +285,5 @@ bool LAK_BASIC_PROGRAM(program_loop)(uint64_t counter_delta)
 int LAK_BASIC_PROGRAM(program_quit)()
 {
 	my_window_ptr.reset();
-
 	return EXIT_SUCCESS;
 }

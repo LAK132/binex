@@ -7,6 +7,8 @@
 
 #include <lak/system/windowing/window.hpp>
 
+#include <lak/imgui/texture.hpp>
+
 #include <imgui_memory_editor.h>
 
 namespace bex
@@ -20,6 +22,14 @@ namespace bex
 		bool draw(lak::span<byte_t> data,
 		          lak::span<byte_t> &view_data,
 		          bool force_update);
+	};
+
+	struct memory_region_selector2
+	{
+		lak::span<byte_t> data;
+		bex::memory_region_selector view;
+
+		bool draw(lak::span<byte_t> data, bool update);
 	};
 
 	enum class pixel_layout : uint8_t
@@ -39,34 +49,34 @@ namespace bex
 		bayer_gbrg,
 	};
 
+	using texture = lak::ImUniqueTexture;
+
+	struct image_viewer
+	{
+		bex::texture texture;
+		float scale = 1.0f;
+		void draw();
+	};
+
 	struct memory_image_viewer
 	{
-		lak::vec2u64_t image_size = {256, 256};
-		lak::vec3u64_t block_skip = {0, 1, 0};
-		ImTextureRef texture;
-		float scale                       = 1.0f;
+		bex::image_viewer img_view;
+		bex::memory_region_selector2 mem_view;
+
+		lak::vec2u64_t image_size         = {256, 256};
+		lak::vec3u64_t block_skip         = {0, 1, 0};
 		lak::array<int, 4> rgbx_bit_count = {8, 8, 8, 0};
 		bex::pixel_layout pixel_layout    = bex::pixel_layout::rgb;
-		lak::span<byte_t> old_data;
-		lak::span<byte_t> image_data;
-		bex::memory_region_selector view;
 
-		~memory_image_viewer();
-
-		void draw(lak::span<byte_t> data, bool force_update);
+		void draw(lak::span<byte_t> data, bool update);
 	};
 
 	struct memory_byte_pairs_viewer
 	{
-		ImTextureRef texture;
-		float scale = 1.0f;
-		lak::span<byte_t> old_data;
-		lak::span<byte_t> image_data;
-		bex::memory_region_selector view;
+		bex::image_viewer img_view;
+		bex::memory_region_selector2 mem_view;
 
-		~memory_byte_pairs_viewer();
-
-		void draw(lak::span<byte_t> data, bool force_update);
+		void draw(lak::span<byte_t> data, bool update);
 	};
 
 	struct memory_viewer
@@ -80,13 +90,11 @@ namespace bex
 
 		memory_view_content_mode content_mode;
 		MemoryEditor editor;
-		memory_image_viewer image_viewer;
-		memory_byte_pairs_viewer byte_pairs_viewer;
+		bex::memory_image_viewer image_viewer;
+		bex::memory_byte_pairs_viewer byte_pairs_viewer;
 
-		void draw(lak::span<byte_t> data, bool force_update);
+		void draw(lak::span<byte_t> data, bool update);
 	};
-
-	void image_view(ImTextureRef texture, const float scale);
 
 	void debug_log_view();
 

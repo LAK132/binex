@@ -106,8 +106,26 @@ bool bex::memory_region_selector::draw(lak::span<byte_t> data,
 	return updated;
 }
 
-void bex::image_view(ImTextureRef texture, const float scale)
+bool bex::memory_region_selector2::draw(lak::span<byte_t> new_data,
+                                        bool update)
 {
+	if (new_data.empty() && data.empty()) return update;
+
+	if (!new_data.empty() && !lak::same_span<byte_t>(new_data, data))
+	{
+		data   = data;
+		update = true;
+	}
+
+	return view.draw(new_data, data, update);
+}
+
+void bex::image_viewer::draw()
+{
+	ImGui::DragFloat("Scale", &scale, 0.1f, 0.1f, 10.0f);
+
+	ImGui::Separator();
+
 	ImGui::BeginChild("Image View",
 	                  ImVec2(0, 0),
 	                  false,
@@ -115,20 +133,27 @@ void bex::image_view(ImTextureRef texture, const float scale)
 	                    ImGuiWindowFlags_AlwaysVerticalScrollbar |
 	                    ImGuiWindowFlags_AlwaysHorizontalScrollbar);
 
-	lak::vec2s_t size = lak::TextureSize(texture);
-
-	ImGui::Image(texture, ImVec2(scale * size.x, scale * size.y));
+	if (!texture)
+	{
+		ImGui::Text("No image selected.");
+	}
+	else
+	{
+		const auto size = lak::TextureSize(texture.get());
+		ImGui::Image(texture.get(),
+		             ImVec2(scale * static_cast<float>(size.x),
+		                    scale * static_cast<float>(size.y)));
+	}
 
 	ImGui::EndChild();
 }
 
 void image_memory_view_impl(lak::span<byte_t> data,
+                            bex::image_viewer &img_view,
                             lak::vec2u64_t &image_size,
                             lak::vec3u64_t &block_skip,
                             lak::span<int, 4> rgbx_bit_count,
                             bex::pixel_layout &pixel_layout,
-                            ImTextureRef &texture,
-                            float &scale,
                             bool &update)
 {
 	{
@@ -139,8 +164,8 @@ void image_memory_view_impl(lak::span<byte_t> data,
 			update     = true;
 		}
 
-		const static uint64_t sizeMin = 0;
-		const static uint64_t sizeMax = 10000;
+		constexpr uint64_t sizeMin = 0;
+		constexpr uint64_t sizeMax = 10000;
 		update |= ImGui::DragScalarN("Image Size (Width/Height)",
 		                             ImGuiDataType_U64,
 		                             &image_size,
@@ -279,7 +304,7 @@ void image_memory_view_impl(lak::span<byte_t> data,
 
 		ImGui::Separator();
 
-		const static uint64_t skipMax = 1000000;
+		constexpr uint64_t skipMax = 1000000;
 		update |= ImGui::DragScalarN("For Every X * Y Pixels Skip Z Bytes (X/Y/Z)",
 		                             ImGuiDataType_U64,
 		                             &block_skip,
@@ -289,11 +314,13 @@ void image_memory_view_impl(lak::span<byte_t> data,
 		                             &skipMax);
 	}
 
-	update |= texture.GetTexID() == ImTextureID_Invalid;
+	update |= !img_view.texture;
 
 	if (update)
 	{
-		static lak::image4_t image{}; // static so we can reuse the memory
+		// static so we can reuse the memory
+		static thread_local lak::image4_t image{};
+
 		image.resize(
 		  {static_cast<size_t>(image_size.x), static_cast<size_t>(image_size.y)});
 
@@ -566,85 +593,44 @@ void image_memory_view_impl(lak::span<byte_t> data,
 			};
 #endif
 
-		texture = lak::CreateTexture(image);
+		img_view.texture = bex::texture::make(image);
 	}
 
-	if (texture.GetTexID() != ImTextureID_Invalid)
-	{
-		ImGui::Separator();
-		ImGui::DragFloat("Scale", &scale, 0.1f, 0.1f, 10.0f);
-		ImGui::Separator();
-		// DERIVED::view_image(texture, scale);
-		bex::image_view(texture, scale);
-	}
-}
+	ImGui::Separator();
 
-bex::memory_image_viewer::~memory_image_viewer()
-{
-	if (texture.GetTexID() != ImTextureID_Invalid) lak::DestroyTexture(texture);
+	img_view.draw();
 }
 
 void bex::memory_image_viewer::draw(lak::span<byte_t> data, bool update)
 {
-	if (data.empty() && old_data.empty()) return;
-
-	if (!data.empty() && !lak::same_span<byte_t>(data, old_data))
-	{
-		old_data   = data;
-		image_data = data;
-		update     = true;
-	}
-
-	// if (update)
-	// {
-	// 	if (SrcExp.view != nullptr && SrcExp.state.file != nullptr &&
-	// 	    data == SrcExp.state.file->data())
-	// 	{
-	// 		auto ref_span = SrcExp.view->ref_span;
-	// 		while (ref_span._source && ref_span._source != SrcExp.state.file)
-	// 			ref_span = ref_span.parent_span();
-	// 		if (!ref_span.empty())
-	// 		{
-	// 			from = ref_span.position().UNWRAP();
-	// 			to   = from + ref_span.size();
-	// 		}
-	// 		else
-	// 		{
-	// 			from = 0;
-	// 			to   = SIZE_MAX;
-	// 		}
-	// 	}
-	// 	else
-	// 	{
-	// 		from = 0;
-	// 		to   = SIZE_MAX;
-	// 	}
-	// }
-
-	update |= view.draw(data, image_data, update);
+	update |= mem_view.draw(data, update);
 
 	ImGui::Separator();
 
-	image_memory_view_impl(image_data,
+	image_memory_view_impl(mem_view.data,
+	                       img_view,
 	                       image_size,
 	                       block_skip,
 	                       rgbx_bit_count,
 	                       pixel_layout,
-	                       texture,
-	                       scale,
 	                       update);
 }
 
 void byte_pairs_memory_view_impl(lak::span<byte_t> data,
-                                 ImTextureRef &texture,
-                                 float &scale,
+                                 bex::image_viewer &img_view,
                                  bool &update)
 {
-	update |= texture.GetTexID() == ImTextureID_Invalid;
+	update |= !img_view.texture;
 
 	if (update)
 	{
-		thread_local static lak::image<float> image{lak::vec2s_t{256, 256}};
+		if (data.empty())
+		{
+			img_view.texture.reset();
+			return;
+		}
+
+		lak::image<float> image{lak::vec2s_t{256, 256}};
 
 		image.fill(0.0f);
 
@@ -657,63 +643,21 @@ void byte_pairs_memory_view_impl(lak::span<byte_t> data,
 		     prev         = uint8_t(*(it++)))
       image[{prev, uint8_t(*it)}] += step;
 
-		texture = lak::CreateTexture(image);
+		img_view.texture = bex::texture::make(image);
 	}
 
-	if (texture.GetTexID() != ImTextureID_Invalid)
-	{
-		ImGui::DragFloat("Scale", &scale, 0.1f, 0.1f, 10.0f);
-		ImGui::Separator();
-		bex::image_view(texture, scale);
-	}
-}
+	ImGui::Separator();
 
-bex::memory_byte_pairs_viewer::~memory_byte_pairs_viewer()
-{
-	if (texture.GetTexID() != ImTextureID_Invalid) lak::DestroyTexture(texture);
+	img_view.draw();
 }
 
 void bex::memory_byte_pairs_viewer::draw(lak::span<byte_t> data, bool update)
 {
-	if (data.empty() && old_data.empty()) return;
-
-	if (!data.empty() && !lak::same_span<byte_t>(data, old_data))
-	{
-		old_data = data;
-		update   = true;
-	}
-
-	// if (update)
-	// {
-	// 	if (SrcExp.view != nullptr && SrcExp.state.file != nullptr &&
-	// 	    data == SrcExp.state.file->data())
-	// 	{
-	// 		auto ref_span = SrcExp.view->ref_span;
-	// 		while (ref_span._source && ref_span._source != SrcExp.state.file)
-	// 			ref_span = ref_span.parent_span();
-	// 		if (!ref_span.empty())
-	// 		{
-	// 			from = ref_span.position().UNWRAP();
-	// 			to   = from + ref_span.size();
-	// 		}
-	// 		else
-	// 		{
-	// 			from = 0;
-	// 			to   = SIZE_MAX;
-	// 		}
-	// 	}
-	// 	else
-	// 	{
-	// 		from = 0;
-	// 		to   = SIZE_MAX;
-	// 	}
-	// }
-
-	update |= view.draw(data, image_data, update);
+	update |= mem_view.draw(data, update);
 
 	ImGui::Separator();
 
-	byte_pairs_memory_view_impl(image_data, texture, scale, update);
+	byte_pairs_memory_view_impl(mem_view.data, img_view, update);
 }
 
 void bex::memory_viewer::draw(lak::span<byte_t> data, bool update)
@@ -745,8 +689,8 @@ void bex::memory_viewer::draw(lak::span<byte_t> data, bool update)
 
 void bex::debug_log_view()
 {
-	static lak::u8string log_str;
-	static const char *log_cstr = nullptr;
+	thread_local static lak::u8string log_str;
+	thread_local static const char *log_cstr = nullptr;
 
 	if (ImGui::Button("Refresh"))
 	{

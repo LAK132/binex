@@ -6,7 +6,6 @@ binex_core = static_library(
 		'core.cpp',
 		'widgets.cpp',
 	],
-	override_options: override_options_w2,
 	include_directories: binex_includes,
 	dependencies: [
 		lak_dep,

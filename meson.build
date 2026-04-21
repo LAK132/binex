@@ -1,16 +1,18 @@
 project(
 	'binex',
 	['c', 'cpp'],
-	default_options: [
-		'b_vscrt=static_from_buildtype',
-	],
+	default_options: {
+		'c_std': 'c11',
+		'cpp_std': ['c++26', 'c++23', 'c++latest'],
+		'b_vscrt': 'static_from_buildtype',
+		'warning_level': '3',
+		'werror': false,
+	},
 )
 
 cxx = meson.get_compiler('cpp')
 
 if cxx.get_id() == 'msvc'
-	version = 'c++latest'
-
 	add_project_arguments(
 		'-DUNICODE',
 		'-DWIN32_LEAN_AND_MEAN',
@@ -29,19 +31,13 @@ if cxx.get_id() == 'msvc'
 		'-Zc:preprocessor',
 		language: ['cpp'])
 
-	add_project_arguments(
-		'-W0',
-		language: ['c'])
-
-	system_libraries = [
+	add_project_link_arguments(
 		'Winmm.lib',
 		'Setupapi.lib',
 		'Version.lib',
 		'Imm32.lib',
-	]
+		language: ['c', 'cpp'])
 else
-	version = 'c++20'
-
 	add_project_arguments(
 		'-Wno-unknown-warning-option',
 		'-Wno-gnu-zero-variadic-macro-arguments',
@@ -56,12 +52,27 @@ else
 		'-Wno-invalid-partial-specialization',
 		'-Wno-missing-field-initializers',
 		'-Wno-maybe-uninitialized',
+		'-Wno-undefined-inline',
 		'-Wfatal-errors',
 		'-Wno-psabi',
 		# '-mavx',
-		language: ['c', 'cpp'])
+		language: ['c', 'cpp', 'objcpp'])
 
-	system_libraries = []
+	if cxx.get_id() == 'gcc'
+		if cxx.has_link_argument('-Wl,-lstdc++_libbacktrace')
+			# GCC <14
+			add_project_link_arguments(
+				'-Wl,-lstdc++_libbacktrace',
+				language: ['cpp'])
+		elif cxx.has_link_argument('-Wl,-lstdc++exp')
+			# GCC >=14
+			add_project_link_arguments(
+				'-Wl,-lstdc++exp',
+				language: ['cpp'])
+		else
+			warning('Unable to determine backtrace library link argument')
+		endif
+	endif
 endif
 
 add_project_arguments(
@@ -78,14 +89,6 @@ lak_subprj = subproject('lak')
 lak_dep = lak_subprj.get_variable('lak_dep')
 imgui_color_text_edit_dep = lak_subprj.get_variable('imgui_color_text_edit_dep')
 imgui_memory_editor_dep = lak_subprj.get_variable('imgui_memory_editor_dep')
-lak_libs = lak_subprj.get_variable('system_libraries')
-
-override_options = lak_subprj.get_variable('override_options')
-override_options_w0 = lak_subprj.get_variable('override_options_w0')
-override_options_w1 = lak_subprj.get_variable('override_options_w1')
-override_options_w2 = lak_subprj.get_variable('override_options_w2')
-override_options_w3 = lak_subprj.get_variable('override_options_w3')
-override_options_werror = lak_subprj.get_variable('override_options_werror')
 
 if host_machine.system() == 'windows'
 	git_header = custom_target(
@@ -115,7 +118,6 @@ executable(
 	],
 	install: true,
 	install_dir: install_directory,
-	override_options: override_options_w2,
 	include_directories: binex_includes,
 	dependencies: [
 		binex_core_dep,
