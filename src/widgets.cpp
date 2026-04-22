@@ -120,12 +120,13 @@ bool bex::memory_region_selector2::draw(lak::span<byte_t> new_data,
 	return view.draw(new_data, data, update);
 }
 
-void bex::image_viewer::draw()
+void bex::view_image(const bex::texture &tex, float scale)
 {
-	ImGui::DragFloat("Scale", &scale, 0.1f, 0.1f, 10.0f);
+	bex::view_image(tex.get(), scale);
+}
 
-	ImGui::Separator();
-
+void bex::view_image(const ImTextureRef &tex, float scale)
+{
 	ImGui::BeginChild("Image View",
 	                  ImVec2(0, 0),
 	                  false,
@@ -133,19 +134,28 @@ void bex::image_viewer::draw()
 	                    ImGuiWindowFlags_AlwaysVerticalScrollbar |
 	                    ImGuiWindowFlags_AlwaysHorizontalScrollbar);
 
-	if (!texture)
+	if (tex == ImTextureID_Invalid)
 	{
 		ImGui::Text("No image selected.");
 	}
 	else
 	{
-		const auto size = lak::TextureSize(texture.get());
-		ImGui::Image(texture.get(),
+		const auto size = lak::TextureSize(tex);
+		ImGui::Image(tex,
 		             ImVec2(scale * static_cast<float>(size.x),
 		                    scale * static_cast<float>(size.y)));
 	}
 
 	ImGui::EndChild();
+}
+
+void bex::image_viewer::draw()
+{
+	ImGui::DragFloat("Scale", &scale, 0.1f, 0.1f, 10.0f);
+
+	ImGui::Separator();
+
+	bex::view_image(texture, scale);
 }
 
 void image_memory_view_impl(lak::span<byte_t> data,
@@ -154,6 +164,7 @@ void image_memory_view_impl(lak::span<byte_t> data,
                             lak::vec3u64_t &block_skip,
                             lak::span<int, 4> rgbx_bit_count,
                             bex::pixel_layout &pixel_layout,
+                            bex::pixel_format &pixel_format,
                             bool &update)
 {
 	{
@@ -176,13 +187,36 @@ void image_memory_view_impl(lak::span<byte_t> data,
 
 		ImGui::Separator();
 
-		if (ImGui::Button("MONO8"))
+		if (ImGui::Button("MONOu8"))
 		{
 			rgbx_bit_count[0U] = 8U;
 			rgbx_bit_count[1U] = 0U;
 			rgbx_bit_count[2U] = 0U;
 			rgbx_bit_count[3U] = 0U;
 			pixel_layout       = bex::pixel_layout::mono;
+			pixel_format       = bex::pixel_format::unsigned_integer;
+			update             = true;
+		}
+		ImGui::SameLine();
+		if (ImGui::Button("MONOs16"))
+		{
+			rgbx_bit_count[0U] = 16U;
+			rgbx_bit_count[1U] = 0U;
+			rgbx_bit_count[2U] = 0U;
+			rgbx_bit_count[3U] = 0U;
+			pixel_layout       = bex::pixel_layout::mono;
+			pixel_format       = bex::pixel_format::signed_integer;
+			update             = true;
+		}
+		ImGui::SameLine();
+		if (ImGui::Button("MONOf32"))
+		{
+			rgbx_bit_count[0U] = 32U;
+			rgbx_bit_count[1U] = 0U;
+			rgbx_bit_count[2U] = 0U;
+			rgbx_bit_count[3U] = 0U;
+			pixel_layout       = bex::pixel_layout::mono;
+			pixel_format       = bex::pixel_format::floating_point;
 			update             = true;
 		}
 		ImGui::SameLine();
@@ -193,6 +227,7 @@ void image_memory_view_impl(lak::span<byte_t> data,
 			rgbx_bit_count[2U] = 5U;
 			rgbx_bit_count[3U] = 1U;
 			pixel_layout       = bex::pixel_layout::rgbx;
+			pixel_format       = bex::pixel_format::unsigned_integer;
 			update             = true;
 		}
 		ImGui::SameLine();
@@ -203,6 +238,7 @@ void image_memory_view_impl(lak::span<byte_t> data,
 			rgbx_bit_count[2U] = 5U;
 			rgbx_bit_count[3U] = 0U;
 			pixel_layout       = bex::pixel_layout::rgb;
+			pixel_format       = bex::pixel_format::unsigned_integer;
 			update             = true;
 		}
 		ImGui::SameLine();
@@ -213,6 +249,18 @@ void image_memory_view_impl(lak::span<byte_t> data,
 			rgbx_bit_count[2U] = 8U;
 			rgbx_bit_count[3U] = 0U;
 			pixel_layout       = bex::pixel_layout::rgb;
+			pixel_format       = bex::pixel_format::unsigned_integer;
+			update             = true;
+		}
+		ImGui::SameLine();
+		if (ImGui::Button("RGBf32"))
+		{
+			rgbx_bit_count[0U] = 32U;
+			rgbx_bit_count[1U] = 32U;
+			rgbx_bit_count[2U] = 32U;
+			rgbx_bit_count[3U] = 0U;
+			pixel_layout       = bex::pixel_layout::rgb;
+			pixel_format       = bex::pixel_format::floating_point;
 			update             = true;
 		}
 		ImGui::SameLine();
@@ -223,6 +271,7 @@ void image_memory_view_impl(lak::span<byte_t> data,
 			rgbx_bit_count[2U] = 8U;
 			rgbx_bit_count[3U] = 0U;
 			pixel_layout       = bex::pixel_layout::bgr;
+			pixel_format       = bex::pixel_format::unsigned_integer;
 			update             = true;
 		}
 		ImGui::SameLine();
@@ -233,6 +282,7 @@ void image_memory_view_impl(lak::span<byte_t> data,
 			rgbx_bit_count[2U] = 8U;
 			rgbx_bit_count[3U] = 8U;
 			pixel_layout       = bex::pixel_layout::rgbx;
+			pixel_format       = bex::pixel_format::unsigned_integer;
 			update             = true;
 		}
 		ImGui::SameLine();
@@ -243,6 +293,7 @@ void image_memory_view_impl(lak::span<byte_t> data,
 			rgbx_bit_count[2U] = 10U;
 			rgbx_bit_count[3U] = 0U;
 			pixel_layout       = bex::pixel_layout::bayer_rggb;
+			pixel_format       = bex::pixel_format::unsigned_integer;
 			update             = true;
 		}
 		ImGui::SameLine();
@@ -253,6 +304,7 @@ void image_memory_view_impl(lak::span<byte_t> data,
 			rgbx_bit_count[2U] = 12U;
 			rgbx_bit_count[3U] = 0U;
 			pixel_layout       = bex::pixel_layout::bayer_rggb;
+			pixel_format       = bex::pixel_format::unsigned_integer;
 			update             = true;
 		}
 		ImGui::SameLine();
@@ -263,6 +315,7 @@ void image_memory_view_impl(lak::span<byte_t> data,
 			rgbx_bit_count[2U] = 14U;
 			rgbx_bit_count[3U] = 0U;
 			pixel_layout       = bex::pixel_layout::bayer_rggb;
+			pixel_format       = bex::pixel_format::unsigned_integer;
 			update             = true;
 		}
 		ImGui::SameLine();
@@ -273,34 +326,48 @@ void image_memory_view_impl(lak::span<byte_t> data,
 			rgbx_bit_count[2U] = 16U;
 			rgbx_bit_count[3U] = 0U;
 			pixel_layout       = bex::pixel_layout::bayer_rggb;
+			pixel_format       = bex::pixel_format::unsigned_integer;
 			update             = true;
 		}
 
 		update |=
 		  ImGui::DragInt4("RGBX Bit Count", rgbx_bit_count.data(), 0.05f, 0, 16);
 
-		int layout = static_cast<int>(pixel_layout);
-		// update |= ImGui::SliderInt("Layout",
-		//                            &layout,
-		//                            (int)bex::pixel_layout::mono,
-		//                            (int)bex::pixel_layout::bayer_rggb);
-		update |= ImGui::Combo("Channel Layout",
-		                       &layout,
-		                       "Monochrome\0"
-		                       "R\0"
-		                       "RG\0"
-		                       "RGB\0"
-		                       "BGR\0"
-		                       "RGBX\0"
-		                       "BGRX\0"
-		                       "XRGB\0"
-		                       "XBGR\0"
-		                       "Bayer RGGB\0"
-		                       "Bayer BGGR\0"
-		                       "Bayer GRBG\0"
-		                       "Bayer GBRG\0"
-		                       "\0");
-		pixel_layout = static_cast<bex::pixel_layout>(layout);
+		{
+			int layout = static_cast<int>(pixel_layout);
+			update |= ImGui::Combo("Channel Layout",
+			                       &layout,
+			                       "Monochrome\0"
+			                       "R\0"
+			                       "RG\0"
+			                       "RGB\0"
+			                       "BGR\0"
+			                       "RGBX\0"
+			                       "BGRX\0"
+			                       "XRGB\0"
+			                       "XBGR\0"
+			                       "Bayer RGGB\0"
+			                       "Bayer BGGR\0"
+			                       "Bayer GRBG\0"
+			                       "Bayer GBRG\0"
+			                       "\0");
+			pixel_layout = static_cast<bex::pixel_layout>(layout);
+		}
+
+		{
+			int format = static_cast<int>(pixel_format);
+			update |= ImGui::Combo("Channel Format",
+			                       &format,
+			                       "Unsigned\0"
+			                       "Signed\0"
+			                       "Float\0"
+			                       "\0");
+			pixel_format = static_cast<bex::pixel_format>(format);
+
+			if (pixel_format == bex::pixel_format::floating_point)
+				for (auto &bc : rgbx_bit_count)
+					if (bc != 0U || bc != 32U || bc != 64U) bc = 32U;
+		}
 
 		ImGui::Separator();
 
@@ -330,8 +397,34 @@ void image_memory_view_impl(lak::span<byte_t> data,
 
 		auto read = [&](uint8_t bit_count) -> uint8_t
 		{
-			return uint8_t(reader.read_bits(bit_count).unwrap_or(0U) >>
-			               (bit_count - std::min<uint8_t>(bit_count, 8U)));
+			uintmax_t _read = reader.read_bits(bit_count).unwrap_or(0U);
+			switch (pixel_format)
+			{
+				case bex::pixel_format::unsigned_integer:
+					return static_cast<uint8_t>(
+					  _read >> (bit_count - std::min<uint8_t>(bit_count, 8U)));
+				case bex::pixel_format::signed_integer:
+					return static_cast<uint8_t>(std::max<int8_t>(
+					  int8_t(0),
+					  int8_t(_read >> (bit_count - std::min<uint8_t>(bit_count, 8U)))));
+				case bex::pixel_format::floating_point:
+					static_assert(std::numeric_limits<float>::is_iec559);
+					switch (bit_count)
+					{
+						case 0U:  return 0U;
+						case 8U:  [[fallthrough]];
+						case 16U: [[fallthrough]];
+						case 24U: ASSERT_NYI();
+						case 32U:
+							return lak::frac_to_int<uint8_t>(
+							  lak::bit_cast<f32_t>(static_cast<uint32_t>(_read)));
+						case 64U:
+							return lak::frac_to_int<uint8_t>(
+							  lak::bit_cast<f64_t>(static_cast<uint32_t>(_read)));
+						default: FATAL("invalid floating point bit count");
+					}
+				default: FATAL("invald pixel format");
+			}
 		};
 		auto read_r = [&]() -> uint8_t
 		{ return read(uint8_t(rgbx_bit_count[0U])); };
@@ -613,6 +706,7 @@ void bex::memory_image_viewer::draw(lak::span<byte_t> data, bool update)
 	                       block_skip,
 	                       rgbx_bit_count,
 	                       pixel_layout,
+	                       pixel_format,
 	                       update);
 }
 
@@ -677,6 +771,7 @@ void bex::memory_viewer::draw(lak::span<byte_t> data, bool update)
 		case VIEW_DATA_BINARY:
 			editor.DrawContents(reinterpret_cast<uint8_t *>(data.data()),
 			                    data.size());
+			if (update) editor.GotoAddrAndHighlight(0, 0);
 			break;
 
 		case VIEW_DATA_BYTE_PAIRS: byte_pairs_viewer.draw(data, update); break;

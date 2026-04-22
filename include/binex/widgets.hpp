@@ -49,7 +49,17 @@ namespace bex
 		bayer_gbrg,
 	};
 
+	enum class pixel_format : uint8_t
+	{
+		unsigned_integer,
+		signed_integer,
+		floating_point,
+	};
+
 	using texture = lak::ImUniqueTexture;
+
+	void view_image(const bex::texture &tex, float scale = 1.0f);
+	void view_image(const ImTextureRef &tex, float scale = 1.0f);
 
 	struct image_viewer
 	{
@@ -67,6 +77,7 @@ namespace bex
 		lak::vec3u64_t block_skip         = {0, 1, 0};
 		lak::array<int, 4> rgbx_bit_count = {8, 8, 8, 0};
 		bex::pixel_layout pixel_layout    = bex::pixel_layout::rgb;
+		bex::pixel_format pixel_format    = bex::pixel_format::unsigned_integer;
 
 		void draw(lak::span<byte_t> data, bool update);
 	};
@@ -81,14 +92,14 @@ namespace bex
 
 	struct memory_viewer
 	{
-		enum memory_view_content_mode : int
+		enum content_mode_t : int
 		{
 			VIEW_DATA_BINARY,
 			VIEW_DATA_BYTE_PAIRS,
 			VIEW_DATA_IMAGE,
 		};
 
-		memory_view_content_mode content_mode;
+		content_mode_t content_mode;
 		MemoryEditor editor;
 		bex::memory_image_viewer image_viewer;
 		bex::memory_byte_pairs_viewer byte_pairs_viewer;
