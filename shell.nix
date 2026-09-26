@@ -1,4 +1,4 @@
-with (import <nixpkgs> { overlays = [ (import ./nix/overlay.nix) ]; });
+with (import <nixpkgs> {});
 
 mkShell {
 	packages = [
@@ -6,8 +6,10 @@ mkShell {
 		ninja
 		cmake
 		pkg-config
-		mesonNoPatch
+		meson
 		sdl2-compat
+		sdl3
+		vulkan-loader
 	] ++ lib.optionals stdenv.hostPlatform.isLinux [
 		libglvnd
 		libgbm
@@ -29,6 +31,7 @@ mkShell {
 	];
 
 	LD_LIBRARY_PATH = lib.makeLibraryPath ([
+		vulkan-loader
 	] ++ lib.optionals stdenv.hostPlatform.isLinux [
 		libxkbcommon
 		wayland
