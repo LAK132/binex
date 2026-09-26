@@ -5,8 +5,14 @@ project(
 		'c_std': 'c11',
 		'cpp_std': ['c++26', 'c++23', 'c++latest'],
 		'b_vscrt': 'static_from_buildtype',
-		'warning_level': '3',
+		'warning_level': '2',
 		'werror': false,
+		'backend_startup_project': 'binex',
+		'backend_max_links': 1,
+		'prefix': meson.global_build_root()/'install',
+		'bindir': 'bin',
+		'libdir': 'lib',
+		'licensedir': 'share'/'licenses',
 	},
 )
 
@@ -106,8 +112,6 @@ else
 	)
 endif
 
-install_directory = host_machine.cpu_family()
-
 subdir('src')
 
 executable(
@@ -116,10 +120,11 @@ executable(
 		'src'/'main.cpp',
 		git_header,
 	],
-	install: true,
-	install_dir: install_directory,
 	include_directories: binex_includes,
 	dependencies: [
 		binex_core_dep,
 	],
+	build_by_default: true,
+	install: get_option('lak_install_targets').contains('binex'),
+	install_rpath: get_option('prefix')/get_option('libdir'),
 )
